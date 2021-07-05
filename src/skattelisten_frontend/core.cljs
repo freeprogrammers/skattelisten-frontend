@@ -8,15 +8,12 @@
 (def typesense-url "")
 (def companies (r/atom []))
 
-(defn handle-search-company [response]
-  (->> response
-       :hits
-       (map #(:document %))
-       (reset! companies)))
-
 (defn search-company! [query]
   (GET (str typesense-url "/collections/records/documents/search")
-    {:handler handle-search-company
+    {:handler #(->> %
+                    :hits
+                    (map (fn [hit] (:document hit)))
+                    (reset! companies))
      :error-handler (fn [{:keys [status status-text]}]
                       (js/console.log status status-text))
      :params {:q query
