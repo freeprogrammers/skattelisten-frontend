@@ -1,46 +1,25 @@
 (ns skattelisten-frontend.core
   (:require
-   [reagent.core :as r]
+   skattelisten-frontend.controllers
    [reagent.dom :as d]
-   [ajax.core :refer [GET]]))
-
-(def typesense-api-key "")
-(def typesense-url "")
-(def companies (r/atom []))
-
-(defn search-company! [query]
-  (GET (str typesense-url "/collections/records/documents/search")
-    {:handler #(->> %
-                    :hits
-                    (map (fn [hit] (:document hit)))
-                    (reset! companies))
-     :error-handler (fn [{:keys [status status-text]}]
-                      (js/console.log status status-text))
-     :params {:q query
-              :query_by "company_name"
-              :per_page 25}
-     :headers {:X-TYPESENSE-API-KEY typesense-api-key}
-     :response-format :json
-     :keywords? true}))
+   [re-frame.core :as rf]))
 
 (defn search-bar [value]
   [:div.search-bar
    [:input.search-bar__input
     {:type "text"
-     :value @value
-     :placeholder "Search CVR or Company name"
-     :on-change #(reset! value (-> % .-target .-value))}]])
+     :value value
+     :placeholder ""
+     :on-change #(rf/dispatch [:set-search-text (-> % .-target .-value)])}]])
 
 (defn header-menu []
-  (let [search-text (r/atom "")]
-    (fn []
-      (search-company! @search-text)
-      [:header
-       [:p.site-name "Skattelisten"]
-       [search-bar search-text]
-       [:div.links]])))
+  (let [search-text (rf/subscribe [:search-text])]
+    [:header
+     [:p.site-name "Skattelisten"]
+     [search-bar @search-text]
+     [:div.links]]))
 
-(defn companies-list [companies]
+(defn display-companies [companies]
   [:table
    [:thead
     [:tr
@@ -67,10 +46,12 @@
   [:div
    [header-menu]
    [:div.body-container
-    [companies-list @companies]]])
+    [display-companies @(rf/subscribe [:companies])]]])
 
 (defn mount-root []
   (d/render [app] (.getElementById js/document "app")))
 
 (defn ^:export init! []
+  (rf/dispatch-sync [:initialize-db])
+  (rf/dispatch [:load-companies ""])
   (mount-root))
