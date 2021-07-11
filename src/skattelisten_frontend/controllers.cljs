@@ -5,6 +5,7 @@
 
 (defonce typesense-uri "")
 (defonce typesense-key "")
+(defonce timeouts (atom {}))
 
 (rf/reg-event-db
  :initialize-db
@@ -12,18 +13,39 @@
    {:companies []
     :search-text ""}))
 
+(rf/reg-fx
+ :dispatch-debounce
+ (fn [[id event-vec n]]
+   (js/clearTimeout (@timeouts id))
+   (swap! timeouts assoc id
+          (js/setTimeout (fn []
+                           (rf/dispatch event-vec)
+                           (swap! timeouts dissoc id))
+                         n))))
+
+(rf/reg-fx
+ :stop-debounce
+ (fn [id]
+   (js/clearTimeout (@timeouts id))
+   (swap! timeouts dissoc id)))
+
+(rf/reg-event-fx
+ :search-text-updated
+ (fn [_ [_ current-search-string]]
+   {:dispatch-debounce [::search [:load-companies current-search-string] 350]}))
+
+(rf/reg-event-fx
+ :set-search-text
+ (fn [{:keys [db]} [_ search-text]]
+   {:db (assoc db :search-text search-text)
+    :dispatch [:search-text-updated search-text]}))
+
 (rf/reg-event-db
  :set-companies
  (fn [db [_ companies]]
    (assoc db :companies
           (->> (companies :hits)
                (map #(:document %))))))
-
-(rf/reg-event-fx
- :set-search-text
- (fn [{:keys [db]} [_ search-text]]
-   {:db (assoc db :search-text search-text)
-    :dispatch [:load-companies search-text]}))
 
 (rf/reg-fx
  :get-companies
